@@ -14,6 +14,8 @@ def load_and_clean_data_streamlit_cached(file_path, is_csv=False):
 
 def load_and_clean_data_streamlit(file_path, is_csv=False, retries=3, delay=3):
     """Loads data from the specified file (Excel or CSV), cleans it, and prepares it for the Streamlit dashboard."""
+    import traceback
+    import sys
     print(f"File path to load: {file_path}")
     print(f"Is CSV: {is_csv}")
 
@@ -55,7 +57,7 @@ def load_and_clean_data_streamlit(file_path, is_csv=False, retries=3, delay=3):
              return None
         except Exception as e:
             print(f"An unexpected error occurred during file loading on attempt {attempt + 1}: {e}")
-            traceback.print_exc() # Print detailed traceback
+            traceback.print_exc(file=sys.stdout) # Print detailed traceback to stdout
             if attempt < retries - 1:
                 print(f"Retrying in {delay} seconds...")
                 time.sleep(delay)
