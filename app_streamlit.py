@@ -13,7 +13,7 @@ from data_processor_streamlit_corrected import load_and_clean_data_streamlit
 # --- Configuração da Página (MOVIDO PARA CÁ) ---
 st.set_page_config(
     page_title="Dashboard Doações EssilorLuxottica",
-    page_icon="assets/logo.png",  # Use a logo como ícone
+    page_icon="logo.png",  # Use a logo como ícone
     layout="wide"
 )
 
@@ -26,7 +26,7 @@ except locale.Error:
 
 # --- Carregamento e Preparação dos Dados ---
 import os
-DATA_FILE_PATH = os.path.abspath("upload/teste_d11.xlsx")
+DATA_FILE_PATH = "teste_d11.xlsx"
 IS_CSV = False
 
 from data_processor_streamlit_corrected import load_and_clean_data_streamlit_cached
