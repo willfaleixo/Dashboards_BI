@@ -10,18 +10,19 @@ import locale
 # Importar a função de carregamento e limpeza de dados
 from data_processor_streamlit_corrected import load_and_clean_data_streamlit
 
+# --- Configuração da Página (MOVIDO PARA CÁ) ---
+st.set_page_config(
+    page_title="Dashboard Doações EssilorLuxottica",
+    page_icon="assets/logo.png",  # Use a logo como ícone
+    layout="wide"
+)
+
 # Definir local para português para nome do mês
 try:
     locale.setlocale(locale.LC_TIME, 'pt_BR.UTF-8')
 except locale.Error:
     st.warning("Locale pt_BR não disponível. Usando locale padrão para nomes de mês.")
 
-# --- Configuração da Página ---
-st.set_page_config(
-    page_title="Dashboard Doações EssilorLuxottica",
-    page_icon="assets/logo.png",  # Use a logo como ícone
-    layout="wide"
-)
 
 # --- Carregamento e Preparação dos Dados ---
 import os
