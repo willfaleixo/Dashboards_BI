@@ -1,16 +1,4 @@
-import sys
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta, date
-import os
-import time
 import locale
-import io
-
-# Importar a função de carregamento e limpeza de dados da versão corrigida
-from data_processor_streamlit_corrected_v2 import load_and_clean_data_streamlit, load_and_clean_data_streamlit_cached
 
 # Definir local para português para nome do mês
 try:
@@ -19,7 +7,20 @@ except locale.Error:
     try:
         locale.setlocale(locale.LC_TIME, 'Portuguese_Brazil.1252') # Windows
     except locale.Error:
-        st.warning("Locale pt_BR não disponível. Usando locale padrão para nomes de mês.")
+        pass  # Não usar st.warning aqui para evitar erro de ordem
+
+import sys
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta, date
+import os
+import time
+import io
+
+# Importar a função de carregamento e limpeza de dados da versão corrigida
+from data_processor_streamlit_corrected_v2 import load_and_clean_data_streamlit, load_and_clean_data_streamlit_cached
 
 # --- Configuração da Página ---
 st.set_page_config(
