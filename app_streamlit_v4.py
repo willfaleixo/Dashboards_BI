@@ -25,7 +25,7 @@ from data_processor_streamlit_corrected_v2 import load_and_clean_data_streamlit,
 # --- Configuração da Página ---
 st.set_page_config(
     page_title="Dashboard Doações EssilorLuxottica",
-    page_icon="assets/logo.png",
+    page_icon="📊",  # Usando emoji como fallback
     layout="wide"
 )
 
@@ -37,15 +37,34 @@ else:
     # Running in a normal Python environment
     base_path = os.path.abspath(".")
 
-DATA_FILE_PATH = os.path.join(base_path, "upload", "teste_d11.xlsx")
+# Lista de possíveis localizações do arquivo de dados
+possible_data_paths = [
+    os.path.join(base_path, "upload", "teste_d11.xlsx"),
+    os.path.join(base_path, "teste_d11.xlsx"),
+    "upload/teste_d11.xlsx",
+    "teste_d11.xlsx",
+    os.path.join(os.getcwd(), "upload", "teste_d11.xlsx"),
+    os.path.join(os.getcwd(), "teste_d11.xlsx")
+]
+
+DATA_FILE_PATH = None
+for path in possible_data_paths:
+    if os.path.exists(path):
+        DATA_FILE_PATH = path
+        break
+
 IS_CSV = False
 
 @st.cache_data(ttl=600)
 def load_data():
-    print(f"Tentando carregar dados de: {os.path.abspath(DATA_FILE_PATH)}")
-    if not os.path.exists(DATA_FILE_PATH):
-        st.error(f"Arquivo de dados não encontrado em: {os.path.abspath(DATA_FILE_PATH)}")
+    if DATA_FILE_PATH is None:
+        st.error("Arquivo de dados não encontrado. Verifique se o arquivo 'teste_d11.xlsx' está presente no repositório.")
+        st.info("Locais verificados:")
+        for path in possible_data_paths:
+            st.write(f"- {path}")
         return None
+    
+    print(f"Tentando carregar dados de: {os.path.abspath(DATA_FILE_PATH)}")
     start_time = time.time()
     try:
         df_loaded = load_and_clean_data_streamlit_cached(DATA_FILE_PATH, IS_CSV)
@@ -98,7 +117,7 @@ else:
 # Obter timestamp da última modificação do arquivo de dados
 last_update_timestamp = None
 try:
-    if df is not None and not df.empty and os.path.exists(DATA_FILE_PATH):
+    if df is not None and not df.empty and DATA_FILE_PATH and os.path.exists(DATA_FILE_PATH):
         last_update_timestamp = datetime.fromtimestamp(os.path.getmtime(DATA_FILE_PATH))
         last_update_str = last_update_timestamp.strftime("%d/%m/%Y %H:%M:%S")
     else:
@@ -112,7 +131,7 @@ except Exception as e:
 # Cabeçalho
 col1, col2, col3 = st.columns([1, 5, 1])
 with col1:
-    # Determine the base path for bundled files (PyInstaller or normal environment)
+    # Lista de possíveis localizações do logo
     if getattr(sys, 'frozen', False):
         # Running in a PyInstaller bundle
         base_path_logo = sys._MEIPASS
@@ -120,9 +139,33 @@ with col1:
         # Running in a normal Python environment
         base_path_logo = os.path.abspath(".")
 
-    logo_path = os.path.join(base_path_logo, "assets", "logo.png")
-    if os.path.exists(logo_path):
-        st.image(logo_path, width=100)
+    possible_logo_paths = [
+        os.path.join(base_path_logo, "assets", "logo.png"),
+        os.path.join(base_path_logo, "logo.png"),
+        "assets/logo.png",
+        "logo.png",
+        os.path.join(os.getcwd(), "assets", "logo.png"),
+        os.path.join(os.getcwd(), "logo.png")
+    ]
+    
+    logo_displayed = False
+    for logo_path in possible_logo_paths:
+        if os.path.exists(logo_path):
+            try:
+                # Verificar se o arquivo é uma imagem válida
+                from PIL import Image
+                img = Image.open(logo_path)
+                st.image(logo_path, width=100)
+                logo_displayed = True
+                break
+            except Exception as e:
+                print(f"Erro ao carregar logo de {logo_path}: {e}")
+                continue
+    
+    if not logo_displayed:
+        # Fallback: usar emoji ou texto
+        st.markdown("### 🏢")
+        
 with col2:
     st.title("Dashboard Doações EssilorLuxottica")
 with col3:
@@ -135,6 +178,10 @@ st.sidebar.header("Filtros")
 
 if df is None or df.empty:
     st.error("Erro ao carregar os dados ou dados vazios. Dashboard não pode ser exibido.")
+    st.info("**Instruções para correção:**")
+    st.write("1. Verifique se o arquivo 'teste_d11.xlsx' está presente no repositório GitHub")
+    st.write("2. O arquivo deve estar na pasta raiz ou em uma pasta chamada 'upload'")
+    st.write("3. Certifique-se de que o arquivo não está corrompido")
     st.stop()
 
 # Função para obter opções de filtro, garantindo a ordem para MesNome
@@ -244,7 +291,7 @@ else:
     st.sidebar.info("Nenhum dado filtrado para baixar.")
 
 # Botão para baixar base original completa (Excel)
-if os.path.exists(DATA_FILE_PATH):
+if DATA_FILE_PATH and os.path.exists(DATA_FILE_PATH):
     with open(DATA_FILE_PATH, "rb") as fp:
         st.sidebar.download_button(
             label="Baixar Base Original Completa",
@@ -335,189 +382,203 @@ else:
     df_mtd = df[(df['DataCriacao'].dt.date >= start_current_month) & (df['DataCriacao'].dt.date <= today)]
     df_wtd = df[(df['DataCriacao'].dt.date >= start_current_week) & (df['DataCriacao'].dt.date <= today)]
 
-    # Períodos Anteriores Correspondentes (YTD, MTD, WTD)
-    start_prev_year_ytd = date(prev_year, 1, 1)
+    # Períodos Anteriores (Mesmo período do ano anterior)
+    start_prev_year = date(prev_year, 1, 1)
+    end_prev_year_ytd = date(prev_year, current_month, current_day) if current_month <= 12 else date(prev_year, 12, 31)
+    
+    start_prev_month = date(prev_month_year, prev_month, 1)
     try:
-        end_prev_year_ytd = date(prev_year, current_month, current_day)
-    except ValueError: # Dia não existe no ano anterior (ex: 29 Fev)
-        end_prev_year_ytd = date(prev_year, current_month, current_day -1)
+        end_prev_month_mtd = date(prev_month_year, prev_month, current_day)
+    except ValueError:
+        # Caso o dia atual não exista no mês anterior (ex: 31 de março vs 28/29 de fevereiro)
+        import calendar
+        last_day_prev_month = calendar.monthrange(prev_month_year, prev_month)[1]
+        end_prev_month_mtd = date(prev_month_year, prev_month, min(current_day, last_day_prev_month))
 
-    start_prev_month_mtd = date(prev_month_year, prev_month, 1)
-    last_day_prev_month = (start_current_month - timedelta(days=1)).day
-    end_prev_month_mtd = date(prev_month_year, prev_month, min(current_day, last_day_prev_month))
+    start_prev_week = prev_week_date - timedelta(days=prev_week_date.weekday())
+    end_prev_week = prev_week_date
 
-    start_prev_week_wtd = start_current_week - timedelta(days=7)
-    end_prev_week_wtd = prev_week_date
+    df_ytd_prev = df[(df['DataCriacao'].dt.date >= start_prev_year) & (df['DataCriacao'].dt.date <= end_prev_year_ytd)]
+    df_mtd_prev = df[(df['DataCriacao'].dt.date >= start_prev_month) & (df['DataCriacao'].dt.date <= end_prev_month_mtd)]
+    df_wtd_prev = df[(df['DataCriacao'].dt.date >= start_prev_week) & (df['DataCriacao'].dt.date <= end_prev_week)]
 
-    df_prev_ytd = df[(df['DataCriacao'].dt.date >= start_prev_year_ytd) & (df['DataCriacao'].dt.date <= end_prev_year_ytd)]
-    df_prev_mtd = df[(df['DataCriacao'].dt.date >= start_prev_month_mtd) & (df['DataCriacao'].dt.date <= end_prev_month_mtd)]
-    df_prev_wtd = df[(df['DataCriacao'].dt.date >= start_prev_week_wtd) & (df['DataCriacao'].dt.date <= end_prev_week_wtd)]
+    # Cálculo dos KPIs
+    def calculate_kpis(df_period):
+        if df_period.empty:
+            return 0, 0
+        total_qty = df_period['QuantidadeKPI'].sum()
+        total_value = df_period['ValorFaturadoKPI'].sum()
+        return total_qty, total_value
 
-    # Calcular KPIs CRIADOS
-    qtd_criada_ytd = df_ytd['QuantidadeKPI'].sum()
-    qtd_criada_prev_ytd = df_prev_ytd['QuantidadeKPI'].sum()
-    delta_criada_yoy = ((qtd_criada_ytd - qtd_criada_prev_ytd) / qtd_criada_prev_ytd * 100) if qtd_criada_prev_ytd != 0 else (float('inf') if qtd_criada_ytd > 0 else 0)
+    qty_ytd, value_ytd = calculate_kpis(df_ytd)
+    qty_ytd_prev, value_ytd_prev = calculate_kpis(df_ytd_prev)
 
-    qtd_criada_mtd = df_mtd['QuantidadeKPI'].sum()
-    qtd_criada_prev_mtd = df_prev_mtd['QuantidadeKPI'].sum()
-    delta_criada_mom = ((qtd_criada_mtd - qtd_criada_prev_mtd) / qtd_criada_prev_mtd * 100) if qtd_criada_prev_mtd != 0 else (float('inf') if qtd_criada_mtd > 0 else 0)
+    qty_mtd, value_mtd = calculate_kpis(df_mtd)
+    qty_mtd_prev, value_mtd_prev = calculate_kpis(df_mtd_prev)
 
-    qtd_criada_wtd = df_wtd['QuantidadeKPI'].sum()
-    qtd_criada_prev_wtd = df_prev_wtd['QuantidadeKPI'].sum()
-    delta_criada_wow = ((qtd_criada_wtd - qtd_criada_prev_wtd) / qtd_criada_prev_wtd * 100) if qtd_criada_prev_wtd != 0 else (float('inf') if qtd_criada_wtd > 0 else 0)
+    qty_wtd, value_wtd = calculate_kpis(df_wtd)
+    qty_wtd_prev, value_wtd_prev = calculate_kpis(df_wtd_prev)
 
-    # Calcular KPIs FATURADOS
-    df_faturado_ytd = df_ytd[df_ytd['StatusKPI'] == "Faturado"]
-    df_faturado_prev_ytd = df_prev_ytd[df_prev_ytd['StatusKPI'] == "Faturado"]
-    qtd_faturada_ytd = df_faturado_ytd['QuantidadeKPI'].sum()
-    qtd_faturada_prev_ytd = df_faturado_prev_ytd['QuantidadeKPI'].sum()
-    delta_faturada_yoy = ((qtd_faturada_ytd - qtd_faturada_prev_ytd) / qtd_faturada_prev_ytd * 100) if qtd_faturada_prev_ytd != 0 else (float('inf') if qtd_faturada_ytd > 0 else 0)
+    # Cálculo das variações percentuais
+    def calculate_percentage_change(current, previous):
+        if previous == 0:
+            return None if current == 0 else float('inf')
+        return ((current - previous) / previous) * 100
 
-    df_faturado_mtd = df_mtd[df_mtd['StatusKPI'] == "Faturado"]
-    df_faturado_prev_mtd = df_prev_mtd[df_prev_mtd['StatusKPI'] == "Faturado"]
-    qtd_faturada_mtd = df_faturado_mtd['QuantidadeKPI'].sum()
-    qtd_faturada_prev_mtd = df_faturado_prev_mtd['QuantidadeKPI'].sum()
-    delta_faturada_mom = ((qtd_faturada_mtd - qtd_faturada_prev_mtd) / qtd_faturada_prev_mtd * 100) if qtd_faturada_prev_mtd != 0 else (float('inf') if qtd_faturada_mtd > 0 else 0)
+    qty_ytd_change = calculate_percentage_change(qty_ytd, qty_ytd_prev)
+    value_ytd_change = calculate_percentage_change(value_ytd, value_ytd_prev)
 
-    df_faturado_wtd = df_wtd[df_wtd['StatusKPI'] == "Faturado"]
-    df_faturado_prev_wtd = df_prev_wtd[df_prev_wtd['StatusKPI'] == "Faturado"]
-    qtd_faturada_wtd = df_faturado_wtd['QuantidadeKPI'].sum()
-    qtd_faturada_prev_wtd = df_faturado_prev_wtd['QuantidadeKPI'].sum()
-    delta_faturada_wow = ((qtd_faturada_wtd - qtd_faturada_prev_wtd) / qtd_faturada_prev_wtd * 100) if qtd_faturada_prev_wtd != 0 else (float('inf') if qtd_faturada_wtd > 0 else 0)
+    qty_mtd_change = calculate_percentage_change(qty_mtd, qty_mtd_prev)
+    value_mtd_change = calculate_percentage_change(value_mtd, value_mtd_prev)
 
-    # --- Exibir KPIs Comparativos (2 Fileiras) --- 
-    st.markdown("##### Volume Criado")
-    comp_kpi_c1, comp_kpi_c2, comp_kpi_c3 = st.columns(3)
-    with comp_kpi_c1:
-        st.markdown(create_custom_kpi_card("YoY Criado", qtd_criada_ytd, qtd_criada_prev_ytd, f"YTD {current_year}", f"YTD {prev_year}", delta_criada_yoy), unsafe_allow_html=True)
-    with comp_kpi_c2:
-        st.markdown(create_custom_kpi_card("MoM Criado", qtd_criada_mtd, qtd_criada_prev_mtd, f"MTD {today.strftime('%b/%Y')}", f"MTD {end_prev_month_mtd.strftime('%b/%Y')}", delta_criada_mom), unsafe_allow_html=True)
-    with comp_kpi_c3:
-        st.markdown(create_custom_kpi_card("WoW Criado", qtd_criada_wtd, qtd_criada_prev_wtd, f"WTD {today.strftime('%d/%b')}", f"WTD {end_prev_week_wtd.strftime('%d/%b')}", delta_criada_wow), unsafe_allow_html=True)
+    qty_wtd_change = calculate_percentage_change(qty_wtd, qty_wtd_prev)
+    value_wtd_change = calculate_percentage_change(value_wtd, value_wtd_prev)
 
-    st.markdown("##### Volume Faturado")
-    comp_kpi_f1, comp_kpi_f2, comp_kpi_f3 = st.columns(3)
-    with comp_kpi_f1:
-        st.markdown(create_custom_kpi_card("YoY Faturado", qtd_faturada_ytd, qtd_faturada_prev_ytd, f"YTD {current_year}", f"YTD {prev_year}", delta_faturada_yoy), unsafe_allow_html=True)
-    with comp_kpi_f2:
-        st.markdown(create_custom_kpi_card("MoM Faturado", qtd_faturada_mtd, qtd_faturada_prev_mtd, f"MTD {today.strftime('%b/%Y')}", f"MTD {end_prev_month_mtd.strftime('%b/%Y')}", delta_faturada_mom), unsafe_allow_html=True)
-    with comp_kpi_f3:
-        st.markdown(create_custom_kpi_card("WoW Faturado", qtd_faturada_wtd, qtd_faturada_prev_wtd, f"WTD {today.strftime('%d/%b')}", f"WTD {end_prev_week_wtd.strftime('%d/%b')}", delta_faturada_wow), unsafe_allow_html=True)
+    # Exibição dos KPIs
+    col1, col2, col3 = st.columns(3)
 
-    st.markdown("<br>", unsafe_allow_html=True) # Espaçamento
+    with col1:
+        st.markdown(create_custom_kpi_card(
+            "Quantidade YTD",
+            qty_ytd, qty_ytd_prev,
+            f"{current_year}", f"{prev_year}",
+            qty_ytd_change
+        ), unsafe_allow_html=True)
 
-    # --- KPIs Filtrados (Status) ---
-    st.subheader("Indicadores Chave (Filtro Aplicado)")
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    with col2:
+        st.markdown(create_custom_kpi_card(
+            "Quantidade MTD",
+            qty_mtd, qty_mtd_prev,
+            f"{current_month:02d}/{current_year}", f"{prev_month:02d}/{prev_month_year}",
+            qty_mtd_change
+        ), unsafe_allow_html=True)
 
-    qtd_criada_filtrada = dff["QuantidadeKPI"].sum()
-    qtd_cancelada_filtrada = dff[dff["StatusKPI"] == "Cancelado"]["QuantidadeKPI"].sum()
-    qtd_faturada_filtrada = dff[dff["StatusKPI"] == "Faturado"]["QuantidadeKPI"].sum()
-    # Aberta = Criada - Cancelada - Faturada (considerando apenas esses 3 status principais)
-    qtd_aberta_filtrada = qtd_criada_filtrada - qtd_cancelada_filtrada - qtd_faturada_filtrada
-    # Ou, se houver outros status: qtd_aberta = dff[~dff["StatusKPI"].isin(["Cancelado", "Faturado"])]["QuantidadeKPI"].sum()
+    with col3:
+        st.markdown(create_custom_kpi_card(
+            "Quantidade WTD",
+            qty_wtd, qty_wtd_prev,
+            "Semana Atual", "Semana Anterior",
+            qty_wtd_change
+        ), unsafe_allow_html=True)
 
-    kpi1.metric(label="Qtd. Criada (Filtro)", value=f"{qtd_criada_filtrada:,}".replace(",", "."))
-    kpi2.metric(label="Qtd. Cancelada (Filtro)", value=f"{qtd_cancelada_filtrada:,}".replace(",", "."))
-    kpi3.metric(label="Qtd. Faturada (Filtro)", value=f"{qtd_faturada_filtrada:,}".replace(",", "."))
-    kpi4.metric(label="Qtd. em Aberto (Filtro)", value=f"{qtd_aberta_filtrada:,}".replace(",", "."))
+    # Segunda linha de KPIs (Valor)
+    col4, col5, col6 = st.columns(3)
 
-    st.markdown("---")
+    with col4:
+        st.markdown(create_custom_kpi_card(
+            "Valor YTD (R$)",
+            value_ytd, value_ytd_prev,
+            f"{current_year}", f"{prev_year}",
+            value_ytd_change
+        ), unsafe_allow_html=True)
 
-    # --- Gráficos (Mantidos como na v3) ---
-    st.subheader("Análise Temporal")
-    col_tempo1, col_tempo2 = st.columns(2)
+    with col5:
+        st.markdown(create_custom_kpi_card(
+            "Valor MTD (R$)",
+            value_mtd, value_mtd_prev,
+            f"{current_month:02d}/{current_year}", f"{prev_month:02d}/{prev_month_year}",
+            value_mtd_change
+        ), unsafe_allow_html=True)
 
-    with col_tempo1:
-        criado_tempo_mes = dff.resample("MS", on="DataCriacao")["QuantidadeKPI"].sum().reset_index()
-        fig_criado_tempo = px.line(criado_tempo_mes, x="DataCriacao", y="QuantidadeKPI", title="Volume Criado por Mês", markers=True, labels={"DataCriacao": "Mês", "QuantidadeKPI": "Quantidade"}, color_discrete_sequence=["black"])
-        fig_criado_tempo.update_layout(hovermode="x unified", margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig_criado_tempo, use_container_width=True)
-
-        criado_ano = dff.groupby("Ano")["QuantidadeKPI"].sum().reset_index()
-        fig_criado_ano = px.bar(criado_ano, x="Ano", y="QuantidadeKPI", title="Volume Criado por Ano", labels={"Ano": "Ano", "QuantidadeKPI": "Quantidade"}, text_auto=True, color_discrete_sequence=["black"])
-        fig_criado_ano.update_layout(margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig_criado_ano, use_container_width=True)
-
-    with col_tempo2:
-        faturado_tempo_mes = dff[dff["StatusKPI"] == "Faturado"].resample("MS", on="DataCriacao")["QuantidadeKPI"].sum().reset_index()
-        fig_faturado_tempo = px.line(faturado_tempo_mes, x="DataCriacao", y="QuantidadeKPI", title="Volume Faturado por Mês", markers=True, labels={"DataCriacao": "Mês", "QuantidadeKPI": "Quantidade Faturada"}, color_discrete_sequence=["black"])
-        fig_faturado_tempo.update_layout(hovermode="x unified", margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig_faturado_tempo, use_container_width=True)
-
-        faturado_ano = dff[dff["StatusKPI"] == "Faturado"].groupby("Ano")["QuantidadeKPI"].sum().reset_index()
-        fig_faturado_ano = px.bar(faturado_ano, x="Ano", y="QuantidadeKPI", title="Volume Faturado por Ano", labels={"Ano": "Ano", "QuantidadeKPI": "Quantidade Faturada"}, text_auto=True, color_discrete_sequence=["black"])
-        fig_faturado_ano.update_layout(margin=dict(l=20, r=20, t=40, b=20))
-        st.plotly_chart(fig_faturado_ano, use_container_width=True)
+    with col6:
+        st.markdown(create_custom_kpi_card(
+            "Valor WTD (R$)",
+            value_wtd, value_wtd_prev,
+            "Semana Atual", "Semana Anterior",
+            value_wtd_change
+        ), unsafe_allow_html=True)
 
     st.markdown("---")
-    st.subheader("Análise por Grupos")
-    col_grupo1, col_grupo2 = st.columns(2)
 
-    with col_grupo1:
-        if "Franqueado" in dff.columns:
-            franqueado_faturado = dff[dff["StatusKPI"] == "Faturado"]
-            franqueado_faturado = franqueado_faturado[franqueado_faturado["Franqueado"] != "Não Especificado"]
-            franqueado_faturado_vol = franqueado_faturado.groupby("Franqueado")["QuantidadeKPI"].sum().reset_index()
-            top_franqueados_faturado = franqueado_faturado_vol.nlargest(15, "QuantidadeKPI")
-            fig_franqueado_faturado = px.bar(top_franqueados_faturado, y="Franqueado", x="QuantidadeKPI", title="Top 15 Franqueados Faturados (Quantidade)", orientation="h", labels={"Franqueado": "Franqueado", "QuantidadeKPI": "Quantidade Total"}, color_discrete_sequence=["black"], text="QuantidadeKPI")
-            fig_franqueado_faturado.update_layout(xaxis_title="Quantidade Total", yaxis_title=None, margin=dict(l=20, r=20, t=40, b=20))
-            fig_franqueado_faturado.update_yaxes(autorange="reversed")
-            st.plotly_chart(fig_franqueado_faturado, use_container_width=True)
+    # --- Gráficos ---
+    st.subheader("Análises Visuais")
+
+    # Gráfico 1: Evolução Mensal
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Evolução Mensal - Quantidade**")
+        if 'MesNome' in dff.columns:
+            monthly_qty = dff.groupby('MesNome')['QuantidadeKPI'].sum().reset_index()
+            fig_monthly_qty = px.bar(monthly_qty, x='MesNome', y='QuantidadeKPI',
+                                   title="Quantidade por Mês")
+            fig_monthly_qty.update_layout(xaxis_title="Mês", yaxis_title="Quantidade")
+            st.plotly_chart(fig_monthly_qty, use_container_width=True)
         else:
-            st.info("Coluna 'Franqueado' não encontrada.")
+            st.warning("Coluna 'MesNome' não encontrada nos dados filtrados.")
 
-    with col_grupo2:
-        if "NomeCompletoZ" in dff.columns:
-            nome_faturado = dff[dff["StatusKPI"] == "Faturado"]
-            nome_faturado = nome_faturado[nome_faturado["NomeCompletoZ"] != "-"]
-            nome_faturado_vol = nome_faturado.groupby("NomeCompletoZ")["QuantidadeKPI"].sum().nlargest(10).reset_index()
-            fig_nome_faturado = px.bar(nome_faturado_vol, y="NomeCompletoZ", x="QuantidadeKPI", title="Top 10 Colaboradores Faturados (Quantidade)", orientation="h", labels={"NomeCompletoZ": "Colaborador", "QuantidadeKPI": "Quantidade Total"}, color_discrete_sequence=["black"], text="QuantidadeKPI")
-            fig_nome_faturado.update_layout(xaxis_title="Quantidade Total", yaxis_title=None, margin=dict(l=20, r=20, t=40, b=20))
-            fig_nome_faturado.update_yaxes(autorange="reversed")
-            st.plotly_chart(fig_nome_faturado, use_container_width=True)
+    with col2:
+        st.markdown("**Evolução Mensal - Valor**")
+        if 'MesNome' in dff.columns:
+            monthly_value = dff.groupby('MesNome')['ValorFaturadoKPI'].sum().reset_index()
+            fig_monthly_value = px.bar(monthly_value, x='MesNome', y='ValorFaturadoKPI',
+                                     title="Valor por Mês")
+            fig_monthly_value.update_layout(xaxis_title="Mês", yaxis_title="Valor (R$)")
+            st.plotly_chart(fig_monthly_value, use_container_width=True)
         else:
-             st.info("Coluna 'NomeCompletoZ' não encontrada.")
+            st.warning("Coluna 'MesNome' não encontrada nos dados filtrados.")
 
-    st.markdown("---")
-    st.subheader("Análise Adicional")
-    col_add1, col_add2 = st.columns(2)
+    # Gráfico 2: Top 10 por Canal
+    col3, col4 = st.columns(2)
 
-    with col_add1:
-        if "BrandCategory" in dff.columns:
-            pie_data = dff.groupby("BrandCategory").size().reset_index(name='count')
-            fig_pie = px.pie(pie_data, names="BrandCategory", values="count", title="Distribuição por Categoria de Marca", color_discrete_sequence=px.colors.sequential.Darkmint)
-            fig_pie.update_layout(margin=dict(l=20, r=20, t=40, b=20))
-            st.plotly_chart(fig_pie, use_container_width=True)
+    with col3:
+        st.markdown("**Top 10 Canais - Quantidade**")
+        if 'CanalBI' in dff.columns:
+            top_canais_qty = dff.groupby('CanalBI')['QuantidadeKPI'].sum().sort_values(ascending=False).head(10).reset_index()
+            fig_canais_qty = px.bar(top_canais_qty, x='QuantidadeKPI', y='CanalBI',
+                                  orientation='h', title="Top 10 Canais por Quantidade")
+            fig_canais_qty.update_layout(xaxis_title="Quantidade", yaxis_title="Canal")
+            st.plotly_chart(fig_canais_qty, use_container_width=True)
         else:
-            st.info("Coluna 'BrandCategory' não encontrada.")
+            st.warning("Coluna 'CanalBI' não encontrada nos dados filtrados.")
 
-    with col_add2:
-        if "BrandCode" in dff.columns:
-            top10_brandcode = dff.groupby("BrandCode")["QuantidadeKPI"].sum().nlargest(10).reset_index()
-            fig_top10 = px.bar(top10_brandcode, x="BrandCode", y="QuantidadeKPI", title="Top 10 por Marca (Quantidade)", labels={"BrandCode": "Marca", "QuantidadeKPI": "Quantidade Total"}, color_discrete_sequence=["black"], text_auto=True)
-            fig_top10.update_layout(margin=dict(l=20, r=20, t=40, b=20))
-            st.plotly_chart(fig_top10, use_container_width=True)
+    with col4:
+        st.markdown("**Top 10 Canais - Valor**")
+        if 'CanalBI' in dff.columns:
+            top_canais_value = dff.groupby('CanalBI')['ValorFaturadoKPI'].sum().sort_values(ascending=False).head(10).reset_index()
+            fig_canais_value = px.bar(top_canais_value, x='ValorFaturadoKPI', y='CanalBI',
+                                    orientation='h', title="Top 10 Canais por Valor")
+            fig_canais_value.update_layout(xaxis_title="Valor (R$)", yaxis_title="Canal")
+            st.plotly_chart(fig_canais_value, use_container_width=True)
         else:
-            st.info("Coluna 'BrandCode' não encontrada.")
+            st.warning("Coluna 'CanalBI' não encontrada nos dados filtrados.")
 
-    # --- Tabela de Dados Filtrados --- 
-    st.markdown("---")
+    # Gráfico 3: Distribuição por Status
+    col5, col6 = st.columns(2)
+
+    with col5:
+        st.markdown("**Distribuição por Status - Quantidade**")
+        if 'StatusKPI' in dff.columns:
+            status_qty = dff.groupby('StatusKPI')['QuantidadeKPI'].sum().reset_index()
+            fig_status_qty = px.pie(status_qty, values='QuantidadeKPI', names='StatusKPI',
+                                  title="Distribuição por Status (Quantidade)")
+            st.plotly_chart(fig_status_qty, use_container_width=True)
+        else:
+            st.warning("Coluna 'StatusKPI' não encontrada nos dados filtrados.")
+
+    with col6:
+        st.markdown("**Distribuição por Status - Valor**")
+        if 'StatusKPI' in dff.columns:
+            status_value = dff.groupby('StatusKPI')['ValorFaturadoKPI'].sum().reset_index()
+            fig_status_value = px.pie(status_value, values='ValorFaturadoKPI', names='StatusKPI',
+                                    title="Distribuição por Status (Valor)")
+            st.plotly_chart(fig_status_value, use_container_width=True)
+        else:
+            st.warning("Coluna 'StatusKPI' não encontrada nos dados filtrados.")
+
+    # --- Tabela de Dados Filtrados ---
     st.subheader("Dados Filtrados")
-    # Usar st.dataframe para melhor interatividade (rolagem, ordenação)
-    # Selecionar colunas relevantes ou mostrar todas, se necessário
-    # Exemplo: Mostrar um subconjunto de colunas
-    colunas_tabela = [
-        'DataCriacao', 'Ano', 'MesNome', 'SemanaAno', 'NumPedido', 'StatusKPI', 
-        'QuantidadeKPI', 'CanalBI', 'Franqueado', 'BrandCode', 'CollectionDesc'
-    ]
-    colunas_existentes_tabela = [col for col in colunas_tabela if col in dff.columns]
-    st.dataframe(dff[colunas_existentes_tabela], use_container_width=True)
-    # Ou mostrar todas as colunas do dataframe filtrado:
-    # st.dataframe(dff, use_container_width=True)
+    
+    # Mostrar apenas as primeiras 1000 linhas para performance
+    display_df = dff.head(1000)
+    st.dataframe(display_df, use_container_width=True)
+    
+    if len(dff) > 1000:
+        st.info(f"Mostrando as primeiras 1000 linhas de {len(dff)} registros totais. Use os filtros para refinar a visualização ou baixe o arquivo completo.")
 
-# --- Assinatura Final --- (Fora do else para sempre aparecer, exceto se erro inicial)
-st.write("---")
-current_year_sig = datetime.now().year
-st.markdown(f"**_BI After Sales EssilorLuxottica | {current_year_sig}_**")
-st.markdown("_<small>Created by Willian Aleixo</small>_", unsafe_allow_html=True)
+    # Adiciona a assinatura
+    st.write("---")
+    current_year_sig = datetime.now().year
+    st.markdown(f"**_BI After Sales EssilorLuxottica | {current_year_sig}_**")
+    st.markdown("_<small>Created by Willian Aleixo</small>_", unsafe_allow_html=True)
+
